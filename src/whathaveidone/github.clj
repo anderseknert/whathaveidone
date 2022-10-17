@@ -1,7 +1,5 @@
-(ns main
-  (:require [clojure.pprint :as pprint]
-            [cljc.java-time.local-date :as ld]
-            [camel-snake-kebab.core :as csk]
+(ns whathaveidone.github
+  (:require [camel-snake-kebab.core :as csk]
             [camel-snake-kebab.extras :as cske]
             [org.httpkit.client :as http]
             [cheshire.core :as json]
@@ -48,10 +46,6 @@
   (when-let [created-at (get event "created_at")]
     (str/starts-with? created-at date)))
 
-(defn printr [val]
-  (println val)
-  val)
-
 (defn process-events [events]
   (let [keywordize (partial cske/transform-keys csk/->kebab-case-keyword)]
     (->> events
@@ -61,15 +55,16 @@
          (mapv #(if (:repo %) (assoc % :repo (get-in % [:repo :name])) %)))))
 
 (defn get-events-by-date [date]
-  (loop [page 1 events []]
-    (let [page-events (get-events page)
-          page-date-events (filter (partial date-matches? date) page-events)
-          events (concat events page-date-events)]
-      (if (or (> page *max-num-pages*)
-              (not (-> (last page-events)
-                       (date-matches? date))))
-        (vec events)
-        (recur (inc page) events)))))
+  (let [matches-date? (partial date-matches? date)]
+    (loop [page 1 events []]
+      (let [page-events (get-events page)
+            page-date-events (filter matches-date? page-events)
+            events (concat events page-date-events)]
+        (if (or (> page *max-num-pages*)
+                (not (matches-date? (last page-events))))
+          (vec events)
+          (recur (inc page) events))))))
+
 
 (defn pluralize [word value]
   (if (> value 1)
@@ -86,12 +81,10 @@
 
     (println "unknown event type" type "with value" value)))
 
-(defn -main []
-  (let [today (str (ld/now))]
-    (->> (get-events-by-date today)
-         process-events
-         (map :type)
-         frequencies
-         (map ->string)
-         (str/join "\n")
-         println)))
+(defn report [date]
+  (->> (get-events-by-date date)
+       process-events
+       (map :type)
+       frequencies
+       (map ->string)
+       (str/join "\n")))
